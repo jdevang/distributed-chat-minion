@@ -75,6 +75,11 @@ func CreateUser(db gorm.DB, user User) User {
 	return user
 }
 
+func UpdateUser(db gorm.DB, user User) User {
+	db.Save(&user)
+	return user
+}
+
 func CreateMessage(db gorm.DB, message Message) Message {
 	result := db.Create(&message)
 	if result.Error != nil {
