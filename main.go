@@ -2,10 +2,26 @@ package main
 
 import (
 	"distributed-chat/minion/db"
+	"distributed-chat/minion/structs"
 	"fmt"
 )
 
+type Message = structs.Message
+type User = structs.User
+
 func main() {
 	connectedDb := db.InitDb()
-	fmt.Println(db.RetrieveMessageById(connectedDb, 2))
+	// message := db.RetrieveMessageById(connectedDb, 2)
+	// var users []User
+	// db.CreateUser(connectedDb, User{Name: "Joe"})
+	db.CreateUser(connectedDb, User{Name: "Jane"})
+	// connectedDb.Find(&users)
+	// db.CreateMessage(connectedDb, Message{SenderID: 1, ReceiverID: 2, Content: "Hi"})
+	// db.CreateMessage(connectedDb, Message{SenderID: 2, ReceiverID: 1, Content: "Hey!"})
+	// db.CreateMessage(connectedDb, Message{SenderID: 1, ReceiverID: 2, Content: "You good?"})
+	// db.CreateMessage(connectedDb, Message{SenderID: 2, ReceiverID: 1, Content: "Yup!"})
+	// db.CreateMessage(connectedDb, Message{SenderID: 1, ReceiverID: 3, Content: "Hey?"})
+	// fmt.Println(message.SenderID, message.ReceiverID)
+	users := db.RetrieveUsersIChatWith(connectedDb, 1)
+	fmt.Println(users)
 }
