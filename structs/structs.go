@@ -6,7 +6,7 @@ import (
 
 type User struct {
 	gorm.Model
-	Name     string
+	Name     string `gorm:"uniqueIndex"`
 	Password string
 }
 

@@ -39,6 +39,12 @@ func RetrieveUserById(db gorm.DB, user_id uint) User {
 	return user
 }
 
+func RetrieveUserByName(db gorm.DB, username string) (User, error) {
+	var user User
+	err := db.First(&user, "name = ?", username).Error
+	return user, err
+}
+
 func RetrieveLatestMessageBySenderAndReceiver(db gorm.DB, sender_id uint, receiver_id uint) Message {
 	var message Message
 	db.Where("sender_id = ? AND receiver_id = ?", sender_id, receiver_id).Last(&message)
@@ -73,6 +79,10 @@ func CreateUser(db gorm.DB, user User) User {
 		fmt.Println("Error while creating user")
 	}
 	return user
+}
+
+func DeleteUser(db gorm.DB, user User) {
+	db.Delete(&user)
 }
 
 func UpdateUser(db gorm.DB, user User) User {
