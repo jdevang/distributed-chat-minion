@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +37,7 @@ func main() {
 	router.POST("/register", register)
 	router.POST("/login", login)
 	router.GET("/users", users)
+	router.GET("/messages", messages)
 	router.POST("/send", send)
 	router.POST("/receive", receive)
 
@@ -94,10 +95,6 @@ func login(c *gin.Context) {
 		return
 	} else {
 		fmt.Println("Error: Password doesn't match")
-		fmt.Println(dbUser.Password)
-		fmt.Println(dbUser.Username)
-		fmt.Println(user.Username)
-		fmt.Println(user.Password)
 		c.IndentedJSON(http.StatusConflict, HTTPStatusMessage{Message: "invalid password"})
 		return
 	}
@@ -115,8 +112,14 @@ func send(c *gin.Context) {
 	username, apiKey := newMessageApiWrapper.SenderName, newMessageApiWrapper.ApiKey
 	message := Message{SenderName: newMessageApiWrapper.SenderName, ReceiverName: newMessageApiWrapper.ReceiverName, Content: newMessageApiWrapper.Content}
 	message.SenderMinionUrlIdentifier = config["minionUrlIdentifier"]
+	user, err := db.RetrieveUserByName(dbInstance, username)
+	if err != nil {
+		fmt.Println("Error verifying apiKey")
+		c.IndentedJSON(http.StatusUnauthorized, HTTPStatusMessage{Message: "invalid apikey"})
+		return
+	}
 
-	if auth.VerifyApiKey(username, apiKey) {
+	if auth.VerifyApiKey(user, apiKey) {
 		status := ""
 		user, err := db.RetrieveUserByName(dbInstance, message.ReceiverName)
 		if err != nil {
@@ -139,9 +142,11 @@ func send(c *gin.Context) {
 		} else if status == "invalid" {
 			fmt.Println("Error: Invalid Message Body")
 			c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "invalid message"})
+			return
 		} else {
 			fmt.Println("Error: Failed to get response from receiver")
 			c.IndentedJSON(http.StatusRequestTimeout, HTTPStatusMessage{Message: "failed to get response from receiver"})
+			return
 		}
 
 		_, err = db.CreateMessage(dbInstance, message)
@@ -150,7 +155,6 @@ func send(c *gin.Context) {
 			message.ReceiverMinionUrlIdentifier = ""
 			db.CreateMessage(dbInstance, message)
 		}
-
 		return
 	} else {
 		fmt.Println("Error: Invalid ApiKey")
@@ -179,7 +183,12 @@ func retrieveMinionUrlIdentifierFromMaster(username string) string {
 		return "timeout"
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+
+	if err != nil {
+
+		return "invalid"
+	}
 
 	result := struct {
 		ReceiverMinionUrlIdentifier string
@@ -223,8 +232,13 @@ func receive(c *gin.Context) {
 		c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "faulty request"})
 		return
 	}
+	// send the message to client
 }
 
 func users(c *gin.Context) {
-	c.IndentedJSON(http.StatusCreated, db.RetrieveAllUsers(dbInstance))
+	c.IndentedJSON(http.StatusOK, db.RetrieveAllUsers(dbInstance))
+}
+
+func messages(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, db.RetrieveAllMessagesBetweenUsers(dbInstance, "testusername1", "testusername2"))
 }

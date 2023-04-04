@@ -35,6 +35,6 @@ func GenApiKey(user User) (string, error) {
 	return key, err
 }
 
-func VerifyApiKey(username string, apiKey string) bool {
-	return true
+func VerifyApiKey(user User, apiKey string) bool {
+	return user.ApiKey == apiKey
 }
