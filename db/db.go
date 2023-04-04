@@ -33,52 +33,54 @@ func RetrieveMessageById(db gorm.DB, message_id uint) Message {
 	return message
 }
 
-func RetrieveUserById(db gorm.DB, user_id uint) User {
+func RetrieveUserById(db gorm.DB, user_id uint) (User, error) {
 	var user User
-	db.First(&user, user_id)
-	return user
+	result := db.First(&user, user_id)
+	return user, result.Error
 }
 
 func RetrieveUserByName(db gorm.DB, username string) (User, error) {
 	var user User
-	err := db.First(&user, "name = ?", username).Error
+	err := db.First(&user, "username = ?", username).Error
+	fmt.Println(user.Username)
 	return user, err
 }
 
-func RetrieveLatestMessageBySenderAndReceiver(db gorm.DB, sender_id uint, receiver_id uint) Message {
+func RetrieveLatestMessageBySenderAndReceiver(db gorm.DB, senderName string, receiverName string) (Message, error) {
 	var message Message
-	db.Where("sender_id = ? AND receiver_id = ?", sender_id, receiver_id).Last(&message)
-	return message
+	result := db.Where("sender_name = ? AND receiver_name = ?", senderName, receiverName).Last(&message)
+	return message, result.Error
 }
 
-func RetrieveAllMessagesBySenderAndReceiver(db gorm.DB, sender_id uint, receiver_id uint) []Message {
+func RetrieveAllMessagesBySenderAndReceiver(db gorm.DB, senderName string, receiverName string) []Message {
 	var messages []Message
-	db.Where("sender_id = ? AND receiver_id = ?", sender_id, receiver_id).Find(&messages)
+	db.Where("sender_name = ? AND receiver_name = ?", senderName, receiverName).Find(&messages)
 	return messages
 }
 
-func RetrieveAllMessagesBetweenUsers(db gorm.DB, user_id1 uint, user_id2 uint) []Message {
+func RetrieveAllMessagesBetweenUsers(db gorm.DB, username1 string, username2 string) []Message {
 	var messages []Message
-	messages = RetrieveAllMessagesBySenderAndReceiver(db, user_id1, user_id2)
-	messages = append(messages, RetrieveAllMessagesBySenderAndReceiver(db, user_id2, user_id1)...)
+	messages = RetrieveAllMessagesBySenderAndReceiver(db, username1, username2)
+	messages = append(messages, RetrieveAllMessagesBySenderAndReceiver(db, username2, username1)...)
 	return messages
 }
 
-func RetrieveUsersIChatWith(db gorm.DB, user_id uint) []User {
+func RetrieveUsersIChatWith(db gorm.DB, username string) []User {
 	var users []User
-	subQuery1 := db.Table("messages").Select("receiver_id as user_id").Where("sender_id = ?", user_id)
-	subQuery2 := db.Table("messages").Select("sender_id as user_id").Where("receiver_id = ?", user_id)
+	subQuery1 := db.Table("messages").Select("receiver_name as username").Where("sender_name = ?", username)
+	subQuery2 := db.Table("messages").Select("sender_name as username").Where("receiver_name = ?", username)
 	subQuery3 := db.Raw("? UNION ?", subQuery1, subQuery2)
 	db.Where("id IN (?)", subQuery3).Find(&users)
 	return users
 }
 
-func CreateUser(db gorm.DB, user User) User {
+func CreateUser(db gorm.DB, user User) (User, error) {
 	result := db.Create(&user)
 	if result.Error != nil {
 		fmt.Println("Error while creating user")
+		return user, result.Error
 	}
-	return user
+	return user, nil
 }
 
 func DeleteUser(db gorm.DB, user User) {
@@ -90,10 +92,19 @@ func UpdateUser(db gorm.DB, user User) User {
 	return user
 }
 
-func CreateMessage(db gorm.DB, message Message) Message {
+func RetrieveAllUsers(db gorm.DB) []User {
+	var users []User
+	result := db.Find(&users)
+	if result.Error != nil {
+		fmt.Println("Error while retrieving users")
+	}
+	return users
+}
+
+func CreateMessage(db gorm.DB, message Message) (Message, error) {
 	result := db.Create(&message)
 	if result.Error != nil {
 		fmt.Println("Error while adding message")
 	}
-	return message
+	return message, result.Error
 }
