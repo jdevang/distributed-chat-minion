@@ -71,7 +71,7 @@ func setupMinionAtMaster() {
 	}
 
 	if !minion.SetAtMaster {
-		url := masterUrl + "/retrieveMinionUrlIdentifier"
+		url := masterUrl + "/registerMinion"
 		payload, _ := json.Marshal(minion)
 		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 		req.Header.Set("Content-Type", "application/json")
