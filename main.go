@@ -5,12 +5,12 @@ import (
 	"distributed-chat/minion/auth"
 	"distributed-chat/minion/db"
 	"distributed-chat/minion/structs"
-	"distributed-chat/minion/utils"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -19,6 +19,7 @@ import (
 type Message = structs.Message
 type User = structs.User
 type HTTPStatusMessage = structs.HTTPStatusMessage
+type Minion = structs.Minion
 
 type MessageApiWrapper struct {
 	ApiKey       string
@@ -27,21 +28,61 @@ type MessageApiWrapper struct {
 	Content      string
 }
 
+type UserApiWrapper struct {
+	ApiKey   string
+	Username string
+}
+type UsersApiWrapper struct {
+	ApiKey       string
+	Username     string
+	ReceiverName string
+}
+
 var dbInstance = db.InitDb()
-var config, _ = utils.ReadConfigFile("config.yaml")
+var minionName = os.Getenv("MINION_NAME")
+var minionUrlIdentifier = os.Getenv("MINION_URL_IDENTIFIER")
+var masterUrl = os.Getenv("MASTER_URL")
 
 func main() {
 	router := gin.Default()
 	db.CreateDbFromSchema(dbInstance)
-
+	setupMinionAtMaster()
+	// get minionurlidentifier from db instead of config or if it doesnt exist in config ping master. set up master url in config. add endpoints to send back list of users and list of messages per user. finish receive endpoint(use existing send functionality here). change retreiveMinionUrlIdentifierFromMaster(). At register do call to master to update masters list
 	router.POST("/register", register)
 	router.POST("/login", login)
-	router.GET("/users", users)
-	router.GET("/messages", messages)
 	router.POST("/send", send)
 	router.POST("/receive", receive)
+	router.POST("/getUsersIChatWith", getUsersIChatWith)
+	router.POST("/getMessagesBetweenMeAndUser", getMessagesBetweenMeAndUser)
 
-	router.Run("localhost:8080")
+	router.GET("/users", users)
+	router.GET("/messages", messages)
+	router.GET("/alive", alive)
+
+	router.SetTrustedProxies(nil)
+
+	router.Run(":8080")
+}
+
+func setupMinionAtMaster() {
+	minion, err := db.RetrieveSelf(dbInstance, minionName)
+	if err != nil {
+		minion, _ = db.CreateMinion(dbInstance, Minion{MinionName: minionName, UrlIdentifier: minionUrlIdentifier, SetAtMaster: false})
+	}
+
+	if !minion.SetAtMaster {
+		url := masterUrl + "/retrieveMinionUrlIdentifier"
+		payload, _ := json.Marshal(minion)
+		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		_, err := client.Do(req)
+		if err != nil {
+			os.Exit(1)
+		}
+		minion.SetAtMaster = true
+		db.UpdateMinion(dbInstance, minion)
+	}
 }
 
 func register(c *gin.Context) {
@@ -111,7 +152,7 @@ func send(c *gin.Context) {
 
 	username, apiKey := newMessageApiWrapper.SenderName, newMessageApiWrapper.ApiKey
 	message := Message{SenderName: newMessageApiWrapper.SenderName, ReceiverName: newMessageApiWrapper.ReceiverName, Content: newMessageApiWrapper.Content}
-	message.SenderMinionUrlIdentifier = config["minionUrlIdentifier"]
+	message.SenderMinionUrlIdentifier = minionUrlIdentifier
 	user, err := db.RetrieveUserByName(dbInstance, username)
 	if err != nil {
 		fmt.Println("Error verifying apiKey")
@@ -131,7 +172,7 @@ func send(c *gin.Context) {
 			}
 
 		} else { //Receiver is coupled to this minion
-			message.ReceiverMinionUrlIdentifier = config["minionUrlIdentifier"]
+			message.ReceiverMinionUrlIdentifier = minionUrlIdentifier
 		}
 
 		status = messageSender(user, message)
@@ -164,7 +205,7 @@ func send(c *gin.Context) {
 }
 
 func retrieveMinionUrlIdentifierFromMaster(username string) string {
-	url := "https://master.example.com/retrieveMinionUrlIdentifier"
+	url := masterUrl + "/retrieveMinionUrlIdentifier"
 	payload, err := json.Marshal(username)
 	if err != nil {
 		return "invalid"
@@ -202,7 +243,13 @@ func retrieveMinionUrlIdentifierFromMaster(username string) string {
 }
 
 func messageSender(user User, message Message) string {
-	url := "https://" + user.ClientUrlIdentifier + ".messageclient.example.com/receive"
+	var url string
+	if message.ReceiverMinionUrlIdentifier == minionUrlIdentifier {
+		url = "https://" + user.ClientUrlIdentifier + ".messageclient.chat.junglesucks.com/receive"
+	} else {
+		url = "https://" + message.ReceiverMinionUrlIdentifier + ".minion.chat.junglesucks.com/receive"
+	}
+
 	payload, err := json.Marshal(message)
 	if err != nil {
 		return "invalid"
@@ -232,7 +279,91 @@ func receive(c *gin.Context) {
 		c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "faulty request"})
 		return
 	}
-	// send the message to client
+	user, err := db.RetrieveUserByName(dbInstance, message.ReceiverName)
+	if err != nil {
+		fmt.Println("No user")
+		c.IndentedJSON(http.StatusNotAcceptable, HTTPStatusMessage{Message: "no such user here"})
+		return
+	}
+
+	status := messageSender(user, message)
+
+	if status == "success" {
+		fmt.Println("Success")
+		c.IndentedJSON(http.StatusOK, HTTPStatusMessage{Message: "Success"})
+	} else if status == "invalid" {
+		fmt.Println("Error: Invalid Message Body")
+		c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "invalid message"})
+		return
+	} else {
+		fmt.Println("Error: Failed to get response from receiver")
+		c.IndentedJSON(http.StatusRequestTimeout, HTTPStatusMessage{Message: "failed to get response from receiver"})
+		return
+	}
+
+	_, err = db.CreateMessage(dbInstance, message)
+
+	if err != nil {
+		message.ReceiverMinionUrlIdentifier = ""
+		db.CreateMessage(dbInstance, message)
+	}
+}
+
+func getUsersIChatWith(c *gin.Context) {
+	var userApiWrapper UserApiWrapper
+	err := c.BindJSON(&userApiWrapper)
+	if err != nil {
+		fmt.Println("Error in reading json")
+		c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "faulty request"})
+		return
+	}
+	user, err := db.RetrieveUserByName(dbInstance, userApiWrapper.Username)
+	if err != nil {
+		fmt.Println("Error verifying apiKey")
+		c.IndentedJSON(http.StatusUnauthorized, HTTPStatusMessage{Message: "invalid apikey"})
+		return
+	}
+
+	if auth.VerifyApiKey(user, userApiWrapper.ApiKey) {
+		users := db.RetrieveUsersIChatWith(dbInstance, user.Username)
+		c.IndentedJSON(http.StatusOK, users)
+
+	} else {
+		fmt.Println("Error: Invalid ApiKey")
+		c.IndentedJSON(http.StatusUnauthorized, HTTPStatusMessage{Message: "invalid apikey"})
+		return
+	}
+}
+
+func getMessagesBetweenMeAndUser(c *gin.Context) {
+	var usersApiWrapper UsersApiWrapper
+	err := c.BindJSON(&usersApiWrapper)
+	if err != nil {
+		fmt.Println("Error in reading json")
+		c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "faulty request"})
+		return
+	}
+	user1, err := db.RetrieveUserByName(dbInstance, usersApiWrapper.Username)
+	if err != nil {
+		fmt.Println("Error verifying apiKey")
+		c.IndentedJSON(http.StatusUnauthorized, HTTPStatusMessage{Message: "invalid apikey"})
+		return
+	}
+	user2, err := db.RetrieveUserByName(dbInstance, usersApiWrapper.ReceiverName)
+	if err != nil {
+		fmt.Println("No User")
+		c.IndentedJSON(http.StatusUnauthorized, []string{})
+		return
+	}
+
+	if auth.VerifyApiKey(user1, usersApiWrapper.ApiKey) {
+		messages := db.RetrieveAllMessagesBetweenUsers(dbInstance, user1.Username, user2.Username)
+		c.IndentedJSON(http.StatusOK, messages)
+	} else {
+		fmt.Println("Error: Invalid ApiKey")
+		c.IndentedJSON(http.StatusUnauthorized, HTTPStatusMessage{Message: "invalid apikey"})
+		return
+	}
 }
 
 func users(c *gin.Context) {
@@ -241,4 +372,8 @@ func users(c *gin.Context) {
 
 func messages(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, db.RetrieveAllMessagesBetweenUsers(dbInstance, "testusername1", "testusername2"))
+}
+
+func alive(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, HTTPStatusMessage{Message: "I'm Alive!"})
 }

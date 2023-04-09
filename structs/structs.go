@@ -6,7 +6,7 @@ import (
 
 type User struct {
 	gorm.Model
-	Username            string `gorm:"uniqueIndex:idx_name,sort:desc"`
+	Username            string `gorm:"uniqueIndex:idx_username"`
 	Password            string
 	ApiKey              string `gorm:"uniqueIndex:idx_api"`
 	ClientUrlIdentifier string
@@ -21,16 +21,11 @@ type Message struct {
 	Content                     string
 }
 
-type Gru struct {
-	gorm.Model
-	Name          string
-	UrlIdentifier string `gorm:"uniqueIndex:idx_gru"`
-}
-
 type Minion struct {
 	gorm.Model
-	Name          string
+	MinionName    string
 	UrlIdentifier string `gorm:"uniqueIndex:idx_minion"`
+	SetAtMaster   bool
 }
 
 type HTTPStatusMessage struct {
