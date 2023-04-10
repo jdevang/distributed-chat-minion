@@ -87,6 +87,15 @@ func RetrieveAllUsers(db gorm.DB) []User {
 	return users
 }
 
+func RetrieveAllMessages(db gorm.DB) []Message {
+	var messages []Message
+	result := db.Find(&messages)
+	if result.Error != nil {
+		fmt.Println("Error while retrieving messages")
+	}
+	return messages
+}
+
 func RetrieveSelf(db gorm.DB, minionName string) (Minion, error) {
 	var minion Minion
 	err := db.First(&minion, "minion_name = ?", minionName).Error

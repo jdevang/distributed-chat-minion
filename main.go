@@ -113,6 +113,7 @@ func register(c *gin.Context) {
 		c.IndentedJSON(http.StatusConflict, HTTPStatusMessage{Message: "username not available"})
 		return
 	}
+	// TODO: registerUser at master
 	c.IndentedJSON(http.StatusCreated, HTTPStatusMessage{Message: "user created"})
 }
 
@@ -390,7 +391,8 @@ func users(c *gin.Context) {
 }
 
 func messages(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, db.RetrieveAllMessagesBetweenUsers(dbInstance, "testusername1", "testusername2"))
+
+	c.IndentedJSON(http.StatusOK, db.RetrieveAllMessages(dbInstance))
 }
 
 func alive(c *gin.Context) {
