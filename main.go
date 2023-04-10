@@ -47,11 +47,11 @@ func main() {
 	router := gin.Default()
 	db.CreateDbFromSchema(dbInstance)
 	setupMinionAtMaster()
-	// get minionurlidentifier from db instead of config or if it doesnt exist in config ping master. set up master url in config. add endpoints to send back list of users and list of messages per user. finish receive endpoint(use existing send functionality here). change retreiveMinionUrlIdentifierFromMaster(). At register do call to master to update masters list
 	router.POST("/register", register)
 	router.POST("/login", login)
 	router.POST("/send", send)
 	router.POST("/receive", receive)
+	router.POST("/checkNewMessages", checkNewMessages)
 	router.POST("/getUsersIChatWith", getUsersIChatWith)
 	router.POST("/getMessagesBetweenMeAndUser", getMessagesBetweenMeAndUser)
 
@@ -244,30 +244,27 @@ func retrieveMinionUrlIdentifierFromMaster(username string) string {
 
 func messageSender(user User, message Message) string {
 	var url string
-	if message.ReceiverMinionUrlIdentifier == minionUrlIdentifier {
-		url = "https://" + user.ClientUrlIdentifier + ".messageclient.chat.junglesucks.com/receive"
-	} else {
+	if message.ReceiverMinionUrlIdentifier != minionUrlIdentifier {
 		url = "https://" + message.ReceiverMinionUrlIdentifier + ".minion.chat.junglesucks.com/receive"
+
+		payload, err := json.Marshal(message)
+		if err != nil {
+			return "invalid"
+		}
+
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+		if err != nil {
+			return "invalid"
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil || resp.Status != "200 OK" {
+
+			return "timeout"
+		}
 	}
-
-	payload, err := json.Marshal(message)
-	if err != nil {
-		return "invalid"
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
-	if err != nil {
-		return "invalid"
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil || resp.Status != "200 OK" {
-
-		return "timeout"
-	}
-
 	return "success"
 }
 
@@ -362,6 +359,28 @@ func getMessagesBetweenMeAndUser(c *gin.Context) {
 	} else {
 		fmt.Println("Error: Invalid ApiKey")
 		c.IndentedJSON(http.StatusUnauthorized, HTTPStatusMessage{Message: "invalid apikey"})
+		return
+	}
+}
+
+func checkNewMessages(c *gin.Context) {
+	var usersApiWrapper UsersApiWrapper
+	err := c.BindJSON(&usersApiWrapper)
+	if err != nil {
+		fmt.Println("Error in reading json")
+		c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "faulty request"})
+		return
+	}
+	user, err := db.RetrieveUserByName(dbInstance, usersApiWrapper.Username)
+	if err != nil {
+		fmt.Println("Error verifying apiKey")
+		c.IndentedJSON(http.StatusUnauthorized, HTTPStatusMessage{Message: "invalid apikey"})
+		return
+	}
+
+	if auth.VerifyApiKey(user, usersApiWrapper.ApiKey) {
+		message, _ := db.RetrieveLatestMessageBySenderAndReceiver(dbInstance, usersApiWrapper.ReceiverName, usersApiWrapper.Username)
+		c.IndentedJSON(http.StatusOK, message)
 		return
 	}
 }
