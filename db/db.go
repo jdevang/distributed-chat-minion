@@ -78,6 +78,12 @@ func RetrieveAllMessagesBetweenUsers(db gorm.DB, username1 string, username2 str
 	return messages
 }
 
+func RetrieveLatestMessagesReceived(db gorm.DB, username string) []Message {
+	var messages []Message
+	db.Where("receiver_name = ? AND created_at > DATE_SUB(NOW(), INTERVAL 10 SECOND)", username).Find(&messages)
+	return messages
+}
+
 func RetrieveAllUsers(db gorm.DB) []User {
 	var users []User
 	result := db.Find(&users)

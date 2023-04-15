@@ -365,23 +365,23 @@ func getMessagesBetweenMeAndUser(c *gin.Context) {
 }
 
 func checkNewMessages(c *gin.Context) {
-	var usersApiWrapper UsersApiWrapper
-	err := c.BindJSON(&usersApiWrapper)
+	var userApiWrapper UserApiWrapper
+	err := c.BindJSON(&userApiWrapper)
 	if err != nil {
 		fmt.Println("Error in reading json")
 		c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "faulty request"})
 		return
 	}
-	user, err := db.RetrieveUserByName(dbInstance, usersApiWrapper.Username)
+	user, err := db.RetrieveUserByName(dbInstance, userApiWrapper.Username)
 	if err != nil {
 		fmt.Println("Error verifying apiKey")
 		c.IndentedJSON(http.StatusUnauthorized, HTTPStatusMessage{Message: "invalid apikey"})
 		return
 	}
 
-	if auth.VerifyApiKey(user, usersApiWrapper.ApiKey) {
-		message, _ := db.RetrieveLatestMessageBySenderAndReceiver(dbInstance, usersApiWrapper.ReceiverName, usersApiWrapper.Username)
-		c.IndentedJSON(http.StatusOK, message)
+	if auth.VerifyApiKey(user, userApiWrapper.ApiKey) {
+		messages := db.RetrieveLatestMessagesReceived(dbInstance, userApiWrapper.Username)
+		c.IndentedJSON(http.StatusOK, messages)
 		return
 	}
 }
