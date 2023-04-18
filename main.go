@@ -28,6 +28,13 @@ type MessageApiWrapper struct {
 	Content      string
 }
 
+type UserAtMaster struct {
+	Username            string
+	Password            string
+	ClientUrlIdentifier string
+	MinionUrlIdentifier string
+}
+
 type UserApiWrapper struct {
 	ApiKey   string
 	Username string
@@ -54,6 +61,7 @@ func main() {
 	router.POST("/checkNewMessages", checkNewMessages)
 	router.POST("/getUsersIChatWith", getUsersIChatWith)
 	router.POST("/getMessagesBetweenMeAndUser", getMessagesBetweenMeAndUser)
+	router.POST("/batchRegister", batchRegister)
 
 	router.GET("/users", users)
 	router.GET("/messages", messages)
@@ -115,7 +123,7 @@ func register(c *gin.Context) {
 	}
 	// TODO: registerUser at master
 	url := masterUrl + "/registerUser"
-	payload, _ := json.Marshal(newUser)
+	payload, _ := json.Marshal(UserAtMaster{Username: newUser.Username, Password: newUser.Password, ClientUrlIdentifier: newUser.ClientUrlIdentifier, MinionUrlIdentifier: minionUrlIdentifier})
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{}
@@ -435,7 +443,7 @@ func batchRegister(c *gin.Context) {
 	// TODO: registerUser at master
 	url := masterUrl + "/registerUser"
 	for _, newUser := range newUsers {
-		payload, _ := json.Marshal(newUser)
+		payload, _ := json.Marshal(UserAtMaster{Username: newUser.Username, Password: newUser.Password, ClientUrlIdentifier: newUser.ClientUrlIdentifier, MinionUrlIdentifier: minionUrlIdentifier})
 		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 		req.Header.Set("Content-Type", "application/json")
 		client := &http.Client{}
