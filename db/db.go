@@ -36,6 +36,15 @@ func CreateUser(db gorm.DB, user User) (User, error) {
 	return user, nil
 }
 
+func CreateUsers(db gorm.DB, users []User) ([]User, error) {
+	result := db.Create(&users)
+	if result.Error != nil {
+		fmt.Println("Error while creating user")
+		return users, result.Error
+	}
+	return users, nil
+}
+
 func RetrieveUserByName(db gorm.DB, username string) (User, error) {
 	var user User
 	err := db.First(&user, "username = ?", username).Error

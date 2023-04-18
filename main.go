@@ -408,3 +408,42 @@ func messages(c *gin.Context) {
 func alive(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, HTTPStatusMessage{Message: "I'm Alive!"})
 }
+
+func batchRegister(c *gin.Context) {
+	var newUsers []User
+	err := c.BindJSON(&newUsers)
+	if err != nil {
+		fmt.Println("Error in reading json")
+		c.IndentedJSON(http.StatusBadRequest, HTTPStatusMessage{Message: "faulty request"})
+		return
+	}
+
+	for _, newUser := range newUsers {
+		newUser.ApiKey, err = auth.GenApiKey(newUser)
+		if err != nil {
+			fmt.Println("Error in generating Api key")
+			c.IndentedJSON(http.StatusConflict, HTTPStatusMessage{Message: "could not create user"})
+			return
+		}
+	}
+
+	newUsers, err = db.CreateUsers(dbInstance, newUsers)
+	if err != nil {
+		c.IndentedJSON(http.StatusConflict, HTTPStatusMessage{Message: "username not available"})
+		return
+	}
+	// TODO: registerUser at master
+	url := masterUrl + "/registerUser"
+	for _, newUser := range newUsers {
+		payload, _ := json.Marshal(newUser)
+		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		_, err = client.Do(req)
+		if err != nil {
+			c.IndentedJSON(http.StatusConflict, HTTPStatusMessage{Message: "username not available"})
+			return
+		}
+	}
+	c.IndentedJSON(http.StatusCreated, HTTPStatusMessage{Message: "users created"})
+}
