@@ -114,6 +114,16 @@ func register(c *gin.Context) {
 		return
 	}
 	// TODO: registerUser at master
+	url := masterUrl + "/registerUser"
+	payload, _ := json.Marshal(newUser)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	_, err = client.Do(req)
+	if err != nil {
+		c.IndentedJSON(http.StatusConflict, HTTPStatusMessage{Message: "username not available"})
+		return
+	}
 	c.IndentedJSON(http.StatusCreated, HTTPStatusMessage{Message: "user created"})
 }
 

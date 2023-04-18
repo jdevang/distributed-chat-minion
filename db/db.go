@@ -42,13 +42,12 @@ func RetrieveUserByName(db gorm.DB, username string) (User, error) {
 	return user, err
 }
 
-func RetrieveUsersIChatWith(db gorm.DB, username string) []User {
-	var users []User
-	subQuery1 := db.Table("messages").Select("receiver_name as username").Where("sender_name = ?", username)
-	subQuery2 := db.Table("messages").Select("sender_name as username").Where("receiver_name = ?", username)
-	subQuery3 := db.Raw("? UNION ?", subQuery1, subQuery2)
-	db.Where("id IN (?)", subQuery3).Find(&users)
-	return users
+func RetrieveUsersIChatWith(db gorm.DB, username string) []map[string]interface{} {
+	var results []map[string]interface{}
+	subQuery1 := db.Table("messages").Select("receiver_name as username, created_at as timestamp").Where("sender_name = ?", username)
+	subQuery2 := db.Table("messages").Select("sender_name as username, created_at as timestamp").Where("receiver_name = ?", username)
+	db.Raw("SELECT username, MAX(timestamp) as timestamp from(? UNION ?) GROUP BY username", subQuery1, subQuery2).Find(&results)
+	return results
 }
 
 func CreateMessage(db gorm.DB, message Message) (Message, error) {
